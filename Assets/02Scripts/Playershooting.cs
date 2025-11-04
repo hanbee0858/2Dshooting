@@ -2,61 +2,82 @@
 
 public class PlayerShooting : MonoBehaviour
 {
-    [Header("총알")]
-    public GameObject bulletPrefab;      // Rigidbody2D + Collider2D + Bullet.cs
-    public float fireDelay = 0.12f;
-    public float muzzleOffset = 0.6f;    // 플레이어 '앞'(위)으로 띄워서 스폰
+    [Header("총알 프리팹 설정")]
+    public GameObject mainBulletPrefab;
+    public GameObject subBulletPrefab;
 
-    Collider2D[] playerCols;
-    float lastFireTime;
+    [Header("발사 세팅")]
+    public float fireCooldown = 0.6f;
+    public bool autoFire = true;
 
-    void Awake()
-    {
-        // 플레이어 및 자식의 2D 콜라이더를 모아, 총알과 충돌을 즉시 무시합니다.
-        playerCols = GetComponentsInChildren<Collider2D>(includeInactive: false);
+    [Header("발사 위치 오프셋")]
+    public float muzzleOffset = 0.6f;
+    public float sideOffset = 0.3f;
 
-        // 탑다운 기본 세팅 보강(혹시 빠졌을 경우)
-        var rb = GetComponent<Rigidbody2D>();
-        if (rb != null)
-        {
-            rb.gravityScale = 0f;
-            rb.freezeRotation = true;
-        }
-    }
+    private float fireTimer;
 
     void Update()
     {
-        if (Input.GetKey(KeyCode.Space) && Time.time >= lastFireTime + fireDelay)
+        fireTimer -= Time.deltaTime;
+
+        // 모드 전환
+        if (Input.GetKeyDown(KeyCode.Alpha1)) autoFire = true;
+        if (Input.GetKeyDown(KeyCode.Alpha2)) autoFire = false;
+
+        // 발사 조건
+        if (autoFire)
         {
-            FireUp(); // 항상 '위'로 발사
-            lastFireTime = Time.time;
+            if (fireTimer <= 0f)
+            {
+                FirePattern();
+                fireTimer = fireCooldown;
+            }
+        }
+        else
+        {
+            if (Input.GetKeyDown(KeyCode.Space) && fireTimer <= 0f)
+            {
+                FirePattern();
+                fireTimer = fireCooldown;
+            }
         }
     }
 
-    void FireUp()
+    void FirePattern()
     {
-        if (!bulletPrefab) return;
+        Vector2 forward = Vector2.up;
 
-        Vector2 shootDir = Vector2.up; // ✅ 위로 고정
-        Vector3 spawnPos = transform.position + (Vector3)(shootDir * muzzleOffset);
+        Vector3 mainPos = transform.position + (Vector3)(forward * muzzleOffset);
+        Vector3 leftPos = transform.position + new Vector3(-sideOffset, 0f, 0f) + (Vector3)(forward * muzzleOffset * 0.8f);
+        Vector3 rightPos = transform.position + new Vector3(sideOffset, 0f, 0f) + (Vector3)(forward * muzzleOffset * 0.8f);
 
-        GameObject go = Instantiate(bulletPrefab, spawnPos, Quaternion.identity);
+        // 메인탄
+        SpawnBullet(mainBulletPrefab, mainPos, forward);
 
-        // 스폰 즉시 플레이어와 충돌 무시(밀림/튐 방지)
-        var bulletCol = go.GetComponent<Collider2D>();
-        if (bulletCol != null && playerCols != null)
+        // 좌우 보조탄
+        SpawnBullet(subBulletPrefab, leftPos, forward);
+        SpawnBullet(subBulletPrefab, rightPos, forward);
+    }
+
+    void SpawnBullet(GameObject prefab, Vector3 pos, Vector2 dir)
+    {
+        if (prefab == null)
         {
-            foreach (var pc in playerCols)
-                if (pc != null) Physics2D.IgnoreCollision(bulletCol, pc, true);
+            Debug.LogError($"[PlayerShooting] {name}: Bullet Prefab이 비어 있습니다! 🔴");
+            return;
         }
 
-        // Bullet 컴포넌트로 방향 전달 (없으면 우회 처리)
-        var bullet = go.GetComponent<Bullet>();
-        if (bullet != null) bullet.Init(shootDir);
+        GameObject go = SimplePool.Get(prefab, pos, Quaternion.identity);
+        if (go == null)
+        {
+            Debug.LogError($"[PlayerShooting] {name}: {prefab.name} 풀 생성 실패 ⚠️");
+            return;
+        }
+
+        Bullet b = go.GetComponent<Bullet>();
+        if (b != null)
+            b.Init(dir, prefab);
         else
-        {
-            var rb = go.GetComponent<Rigidbody2D>();
-            if (rb != null) { rb.gravityScale = 0f; rb.linearVelocity = shootDir * 8f; }
-        }
+            Debug.LogError($"[PlayerShooting] {prefab.name}에 Bullet 스크립트가 없습니다!");
     }
 }

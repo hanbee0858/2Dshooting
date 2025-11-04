@@ -4,47 +4,82 @@
 [RequireComponent(typeof(Rigidbody2D))]
 public class Bullet : MonoBehaviour
 {
-    [Header("가속(빠르게 체감)")]
-    public float startSpeed = 2f;
-    public float endSpeed = 14f;
-    public float accelTime = 1.2f;
+    [Header("속도/가속 설정")]
+    public float startSpeed = 4f;
+    public float endSpeed = 12f;
+    public float accelTime = 0.8f;
 
-    [Header("기타")]
+    [Header("수명")]
     public float lifeTime = 5f;
 
-    Rigidbody2D rb;
-    Vector2 dir = Vector2.up; // 기본 위쪽
-    float t;
+    [HideInInspector] public GameObject originPrefab;
 
-    public void Init(Vector2 direction)
+    private Rigidbody2D rb;
+    private Vector2 dir = Vector2.up;
+    private float t, life;
+
+    public void Init(Vector2 direction, GameObject prefabKey)
     {
         dir = direction.sqrMagnitude > 0 ? direction.normalized : Vector2.up;
+        originPrefab = prefabKey;
+        t = 0f;
+        life = 0f;
+
+        // SubBullet이면 속도 빠르게 세팅
+        if (gameObject.name.Contains("Sub") || gameObject.name.Contains("sub"))
+        {
+            startSpeed = 7f;
+            endSpeed = 18f;
+            accelTime = 0.4f;
+        }
+
+        var sr = GetComponent<SpriteRenderer>();
+        if (sr != null)
+        {
+            sr.sortingOrder = Mathf.Max(sr.sortingOrder, 100);
+            var c = sr.color; c.a = 1f; sr.color = c;
+        }
+
+        transform.position = new Vector3(transform.position.x, transform.position.y, 0f);
     }
 
     void Awake()
     {
-        // 혹시 Player에 붙었으면 즉시 중단(문제의 핵심을 예방)
-        if (GetComponent<PlayerShooting>() != null)
-        {
-            Debug.LogError("[Bullet] Player에 붙어있습니다. 총알 프리팹에만 붙이세요.");
-            enabled = false; return;
-        }
-
         rb = GetComponent<Rigidbody2D>();
-        rb.gravityScale = 0f;        // 총알은 중력 X
+        rb.gravityScale = 0f;
         rb.freezeRotation = true;
     }
 
-    void OnEnable() => Destroy(gameObject, lifeTime);
+    void OnEnable()
+    {
+        t = 0f;
+        life = 0f;
+    }
 
     void FixedUpdate()
     {
-        if (!enabled) return;
-
         t += Time.fixedDeltaTime;
+        life += Time.fixedDeltaTime;
+
         float k = Mathf.Clamp01(t / accelTime);
         float speed = Mathf.Lerp(startSpeed, endSpeed, k);
+        rb.linearVelocity = dir * speed;
 
-        rb.velocity = dir * speed;
+        if (life >= lifeTime)
+            ReturnToPool();
+    }
+
+    void OnTriggerEnter2D(Collider2D other) => ReturnToPool();
+    void OnBecameInvisible() => ReturnToPool();
+
+    private void ReturnToPool()
+    {
+        if (!gameObject.activeSelf) return;
+        rb.linearVelocity = Vector2.zero;
+
+        if (originPrefab != null)
+            SimplePool.Return(originPrefab, gameObject, null);
+        else
+            gameObject.SetActive(false);
     }
 }
