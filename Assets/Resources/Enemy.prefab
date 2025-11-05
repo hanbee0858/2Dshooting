@@ -31,7 +31,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -0.06, y: 2.96, z: 0}
-  m_LocalScale: {x: 0.92929, y: 0.92929, z: 0.92929}
+  m_LocalScale: {x: 0.5, y: 0.5, z: 0.5}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -130,17 +130,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d4bef17b7be0f9a46a014931a58a1b40, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHP: 100
-  moveSpeed: 1.5
-  retargetEvery: 1.5
-  padding: 0.8
-  enemyBulletPrefab: {fileID: 8362934406945012652, guid: c8d76d00ed7682a41bee1c24aa664fb5, type: 3}
-  enemyBulletResourcePath: EnemyBullet
-  fireRate: 1.2
-  fireJitter: 0.35
-  enemyBulletSpeed: 6
-  enemyBulletDamage: 20
-  maxActiveEnemyBullets: 150
+  firePoint: {fileID: 0}
+  bulletPrefab: {fileID: 0}
+  player: {fileID: 0}
+  bulletSpeed: 8
+  bulletLife: 2
+  bulletAccel: 0
+  fireInterval: 1.2
 --- !u!114 &1353537478156041187
 MonoBehaviour:
   m_ObjectHideFlags: 0
