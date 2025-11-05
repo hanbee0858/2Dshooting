@@ -2,82 +2,100 @@
 
 public class PlayerShooting : MonoBehaviour
 {
-    [Header("총알 프리팹 설정")]
+    [Header("프리팹")]
     public GameObject mainBulletPrefab;
     public GameObject subBulletPrefab;
 
-    [Header("발사 세팅")]
-    public float fireCooldown = 0.6f;
-    public bool autoFire = true;
+    [Header("발사 지점")]
+    public Transform firePoint;
 
-    [Header("발사 위치 오프셋")]
-    public float muzzleOffset = 0.6f;
-    public float sideOffset = 0.3f;
+    [Header("데미지/속도")]
+    public float mainBulletDamage = 80f;  // ✅ 주탄 80
+    public float subBulletDamage = 30f;  // ✅ 보탄 30
+    public float mainBulletSpeed = 12f;
+    public float subBulletSpeed = 9f;
 
-    private float fireTimer;
+    [Header("발사 설정")]
+    public bool isAuto = false;          // 기본 수동(스페이스)
+    public float fireInterval = 0.45f;    // "간격" 개념
+
+    [Header("동시 활성 제한")]
+    public int maxActiveMain = 120;
+    public int maxActiveSub = 80;
+
+    [Header("키")]
+    public KeyCode manualFireKey = KeyCode.Space;
+    public KeyCode forceFireKey = KeyCode.Q;
+
+    // 누적 타이머
+    float fireAccum = 0f;
+    bool wantFire = false;
+
+    void Awake()
+    {
+        if (!firePoint)
+        {
+            var t = transform.Find("FirePoint");
+            if (t) firePoint = t;
+            else
+            {
+                var go = new GameObject("FirePoint");
+                go.transform.SetParent(transform);
+                go.transform.localPosition = new Vector3(0f, 0.6f, 0f);
+                firePoint = go.transform;
+            }
+        }
+        if (!mainBulletPrefab) mainBulletPrefab = Resources.Load<GameObject>("MainBullet");
+        if (!subBulletPrefab) subBulletPrefab = Resources.Load<GameObject>("SubBullet");
+        CameraShake.Ensure();
+    }
 
     void Update()
     {
-        fireTimer -= Time.deltaTime;
+        if (Input.GetKeyDown(KeyCode.Alpha1)) isAuto = true;
+        if (Input.GetKeyDown(KeyCode.Alpha2)) isAuto = false;
 
-        // 모드 전환
-        if (Input.GetKeyDown(KeyCode.Alpha1)) autoFire = true;
-        if (Input.GetKeyDown(KeyCode.Alpha2)) autoFire = false;
+        // 입력 의지
+        if (Input.GetKeyDown(forceFireKey)) wantFire = true;
+        if (!isAuto) wantFire |= Input.GetKey(manualFireKey);
+        else wantFire = true;
 
-        // 발사 조건
-        if (autoFire)
+        // 누적 타이머로 정확 간격
+        fireAccum += Time.deltaTime;
+        while (wantFire && fireAccum >= fireInterval)
         {
-            if (fireTimer <= 0f)
-            {
-                FirePattern();
-                fireTimer = fireCooldown;
-            }
+            FireTripleOnce();           // 한 프레임에 주+좌+우 동시
+            fireAccum -= fireInterval;
         }
-        else
-        {
-            if (Input.GetKeyDown(KeyCode.Space) && fireTimer <= 0f)
-            {
-                FirePattern();
-                fireTimer = fireCooldown;
-            }
-        }
+        wantFire = false;
     }
 
-    void FirePattern()
+    void FireTripleOnce()
     {
-        Vector2 forward = Vector2.up;
+        if (!firePoint || !mainBulletPrefab) return;
 
-        Vector3 mainPos = transform.position + (Vector3)(forward * muzzleOffset);
-        Vector3 leftPos = transform.position + new Vector3(-sideOffset, 0f, 0f) + (Vector3)(forward * muzzleOffset * 0.8f);
-        Vector3 rightPos = transform.position + new Vector3(sideOffset, 0f, 0f) + (Vector3)(forward * muzzleOffset * 0.8f);
+        // 보조탄 2발이 "같은 프레임"에 나갈 수 없으면 생략(엇박 방지)
+        int needSubs = subBulletPrefab ? 2 : 0;
+        bool canMain = SimplePool.ActiveCount(mainBulletPrefab) < maxActiveMain;
+        bool canSubs = (needSubs == 0) ||
+                       (SimplePool.ActiveCount(subBulletPrefab) + needSubs <= maxActiveSub);
+        if (!canMain) return;
 
-        // 메인탄
-        SpawnBullet(mainBulletPrefab, mainPos, forward);
+        // 주탄
+        var m = SimplePool.Get(mainBulletPrefab, firePoint.position, Quaternion.identity);
+        m.GetComponent<BulletBase>()?.Init("Player", Vector2.up, mainBulletSpeed, mainBulletDamage, mainBulletPrefab);
 
-        // 좌우 보조탄
-        SpawnBullet(subBulletPrefab, leftPos, forward);
-        SpawnBullet(subBulletPrefab, rightPos, forward);
-    }
-
-    void SpawnBullet(GameObject prefab, Vector3 pos, Vector2 dir)
-    {
-        if (prefab == null)
+        // 보조탄(둘 다 동시)
+        if (needSubs > 0 && canSubs)
         {
-            Debug.LogError($"[PlayerShooting] {name}: Bullet Prefab이 비어 있습니다! 🔴");
-            return;
-        }
+            var L = firePoint.position + new Vector3(-0.3f, 0f, 0f);
+            var R = firePoint.position + new Vector3(0.3f, 0f, 0f);
 
-        GameObject go = SimplePool.Get(prefab, pos, Quaternion.identity);
-        if (go == null)
-        {
-            Debug.LogError($"[PlayerShooting] {name}: {prefab.name} 풀 생성 실패 ⚠️");
-            return;
-        }
+            var s1 = SimplePool.Get(subBulletPrefab, L, Quaternion.identity);
+            s1.GetComponent<BulletBase>()?.Init("Player", new Vector2(-0.12f, 1f), subBulletSpeed, subBulletDamage, subBulletPrefab);
 
-        Bullet b = go.GetComponent<Bullet>();
-        if (b != null)
-            b.Init(dir, prefab);
-        else
-            Debug.LogError($"[PlayerShooting] {prefab.name}에 Bullet 스크립트가 없습니다!");
+            var s2 = SimplePool.Get(subBulletPrefab, R, Quaternion.identity);
+            s2.GetComponent<BulletBase>()?.Init("Player", new Vector2(0.12f, 1f), subBulletSpeed, subBulletDamage, subBulletPrefab);
+        }
     }
 }

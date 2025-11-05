@@ -11,8 +11,8 @@ GameObject:
   - component: {fileID: 6933979739375920561}
   - component: {fileID: 6835653698305897206}
   - component: {fileID: -3705387360349949315}
-  - component: {fileID: -876890768010101780}
   - component: {fileID: 7283986951626262657}
+  - component: {fileID: 1139022085609753723}
   m_Layer: 0
   m_Name: MainBullet
   m_TagString: Untagged
@@ -117,22 +117,6 @@ Rigidbody2D:
   m_SleepingMode: 1
   m_CollisionDetection: 0
   m_Constraints: 4
---- !u!114 &-876890768010101780
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2731113379812055199}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 94864b969ad8e6546a9cdb0010f15dd8, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  startSpeed: 2
-  endSpeed: 14
-  accelTime: 1.2
-  lifeTime: 5
 --- !u!68 &7283986951626262657
 EdgeCollider2D:
   m_ObjectHideFlags: 0
@@ -176,3 +160,21 @@ EdgeCollider2D:
   m_AdjacentEndPoint: {x: 0, y: 0}
   m_UseAdjacentStartPoint: 0
   m_UseAdjacentEndPoint: 0
+--- !u!114 &1139022085609753723
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2731113379812055199}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 330faaa070fc8474b899ddb7e1a1f03c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  owner: Player
+  speed: 8
+  dir: {x: 0, y: 1}
+  lifeTime: 5
+  damage: 10
+  originPrefab: {fileID: 0}

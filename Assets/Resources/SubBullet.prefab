@@ -11,8 +11,8 @@ GameObject:
   - component: {fileID: 1195519319499300048}
   - component: {fileID: 5428288972344833093}
   - component: {fileID: 5288792154765495216}
-  - component: {fileID: 50373269772437533}
   - component: {fileID: 8083856972309065112}
+  - component: {fileID: 2624593173702538923}
   m_Layer: 0
   m_Name: SubBullet
   m_TagString: Untagged
@@ -116,23 +116,7 @@ Rigidbody2D:
   m_Interpolate: 0
   m_SleepingMode: 1
   m_CollisionDetection: 0
-  m_Constraints: 1
---- !u!114 &50373269772437533
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1742726806636721469}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 94864b969ad8e6546a9cdb0010f15dd8, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  startSpeed: 2
-  endSpeed: 14
-  accelTime: 1.2
-  lifeTime: 5
+  m_Constraints: 5
 --- !u!70 &8083856972309065112
 CapsuleCollider2D:
   m_ObjectHideFlags: 0
@@ -170,3 +154,21 @@ CapsuleCollider2D:
   m_Offset: {x: 0, y: 0}
   m_Size: {x: 1, y: 0.8828125}
   m_Direction: 0
+--- !u!114 &2624593173702538923
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1742726806636721469}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 330faaa070fc8474b899ddb7e1a1f03c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  owner: Player
+  speed: 8
+  dir: {x: 0, y: 1}
+  lifeTime: 5
+  damage: 10
+  originPrefab: {fileID: 0}
