@@ -4,58 +4,65 @@ using UnityEngine;
 public static class SimplePool
 {
     static readonly Dictionary<GameObject, Queue<GameObject>> pools = new();
-    static readonly Dictionary<GameObject, int> activeCount = new();
+    static readonly Dictionary<GameObject, int> active = new();
+    static Transform container;
+
+    static Transform Container
+    {
+        get
+        {
+            if (!container)
+            {
+                var go = GameObject.Find("Bullets_Container");
+                if (!go) go = new GameObject("Bullets_Container");
+                container = go.transform;
+            }
+            return container;
+        }
+    }
 
     public static int ActiveCount(GameObject prefab)
-        => prefab != null && activeCount.TryGetValue(prefab, out var c) ? c : 0;
+        => prefab && active.TryGetValue(prefab, out var c) ? c : 0;
 
     public static GameObject Get(GameObject prefab, Vector3 pos, Quaternion rot)
     {
         if (!prefab) return null;
-
         if (!pools.ContainsKey(prefab)) pools[prefab] = new Queue<GameObject>();
-        if (!activeCount.ContainsKey(prefab)) activeCount[prefab] = 0;
+        if (!active.ContainsKey(prefab)) active[prefab] = 0;
 
         GameObject obj = pools[prefab].Count > 0 ? pools[prefab].Dequeue() : Object.Instantiate(prefab);
+        obj.transform.SetParent(Container, false);
         obj.transform.SetPositionAndRotation(pos, rot);
         obj.SetActive(true);
 
-        if (obj.TryGetComponent<Rigidbody2D>(out var rb))
-        { rb.linearVelocity = Vector2.zero; rb.angularVelocity = 0f; }
+        // ✔ 풀키 자동 주입
+        var key = obj.GetComponent<PoolKey>();
+        if (!key) key = obj.AddComponent<PoolKey>();
+        key.prefab = prefab;
 
-        activeCount[prefab]++;
+        if (obj.TryGetComponent<Rigidbody2D>(out var rb)) { rb.linearVelocity = Vector2.zero; rb.angularVelocity = 0f; }
 
-        // 혹시 모를 누적 방지용(안전 타이머): 10초 뒤 자동 회수
-        obj.GetComponent<PoolAutoReturn>()?.Arm(prefab, 10f);
-
+        active[prefab]++;
         return obj;
     }
 
     public static void Return(GameObject prefab, GameObject obj)
     {
         if (!prefab || !obj) return;
-
         if (!pools.ContainsKey(prefab)) pools[prefab] = new Queue<GameObject>();
-        if (!activeCount.ContainsKey(prefab)) activeCount[prefab] = 0;
+        if (!active.ContainsKey(prefab)) active[prefab] = 0;
 
-        if (obj.TryGetComponent<Rigidbody2D>(out var rb))
-        { rb.linearVelocity = Vector2.zero; rb.angularVelocity = 0f; }
+        if (obj.TryGetComponent<Rigidbody2D>(out var rb)) { rb.linearVelocity = Vector2.zero; rb.angularVelocity = 0f; }
 
         obj.SetActive(false);
+        obj.transform.SetParent(Container, false);
         pools[prefab].Enqueue(obj);
-        activeCount[prefab] = Mathf.Max(0, activeCount[prefab] - 1);
+        active[prefab] = Mathf.Max(0, active[prefab] - 1);
     }
 }
 
-// 🔒 풀 객체 안전타이머(있으면 사용)
-public class PoolAutoReturn : MonoBehaviour
+// ✔ 오브젝트가 스스로 자신의 '원본 프리팹'을 알 수 있게 해주는 표식
+public class PoolKey : MonoBehaviour
 {
-    GameObject key; float t; bool armed;
-    public void Arm(GameObject prefabKey, float seconds) { key = prefabKey; t = seconds; armed = true; }
-    void Update()
-    {
-        if (!armed) return;
-        t -= Time.deltaTime;
-        if (t <= 0f) { armed = false; SimplePool.Return(key, gameObject); }
-    }
+    public GameObject prefab;
 }

@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 9089371440459640605}
   - component: {fileID: 5731854110798929885}
   - component: {fileID: 2930520521361236379}
-  - component: {fileID: -6309645440128735226}
+  - component: {fileID: 4710536022312384022}
   m_Layer: 0
   m_Name: EnemyBullet
   m_TagString: Untagged
@@ -167,16 +167,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d4bef17b7be0f9a46a014931a58a1b40, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  hp: 100
+  maxHP: 100
   moveSpeed: 2
-  moveRange: 3
+  retargetEvery: 1.4
+  padding: 0.8
   enemyBulletPrefab: {fileID: 0}
   enemyBulletResourcePath: EnemyBullet
   fireRate: 0.8
+  fireJitter: 0.35
   enemyBulletSpeed: 6
   enemyBulletDamage: 20
-  debugLog: 1
---- !u!114 &-6309645440128735226
+  maxActiveEnemyBullets: 60
+--- !u!114 &4710536022312384022
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -188,12 +190,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 330faaa070fc8474b899ddb7e1a1f03c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  owner: Player
+  owner: Enemy
   speed: 8
-  dir: {x: 0, y: 1}
-  lifeTime: 5
+  dir: {x: 0, y: -1}
+  lifeTime: 2
+  killAfter: 6
+  edgeMargin: 0.05
   damage: 10
-  originPrefab: {fileID: 0}
 --- !u!1001 &3594761195115370577
 PrefabInstance:
   m_ObjectHideFlags: 0
