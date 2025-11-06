@@ -100,7 +100,7 @@ Rigidbody2D:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8362934406945012652}
-  m_BodyType: 0
+  m_BodyType: 1
   m_Simulated: 1
   m_UseFullKinematicContacts: 0
   m_UseAutoMass: 0
@@ -167,17 +167,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d4bef17b7be0f9a46a014931a58a1b40, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHP: 100
+  player: {fileID: 0}
+  firePoint: {fileID: 0}
+  bulletPrefab: {fileID: 8362934406945012652}
   moveSpeed: 2
-  retargetEvery: 1.4
-  padding: 0.8
-  enemyBulletPrefab: {fileID: 0}
-  enemyBulletResourcePath: EnemyBullet
-  fireRate: 0.8
-  fireJitter: 0.35
-  enemyBulletSpeed: 6
-  enemyBulletDamage: 20
-  maxActiveEnemyBullets: 60
+  stopDistance: 3
+  bulletSpeed: 8
+  bulletLife: 2
+  bulletAccel: 0
+  fireInterval: 1
+  verbose: 1
+  fallbackBulletPath: EnemyBullet
 --- !u!114 &4710536022312384022
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -190,13 +190,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 330faaa070fc8474b899ddb7e1a1f03c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  owner: Enemy
   speed: 8
-  dir: {x: 0, y: -1}
+  acceleration: 0
+  direction: {x: 0, y: 1}
   lifeTime: 2
-  killAfter: 6
-  edgeMargin: 0.05
-  damage: 10
+  owner: {fileID: 0}
 --- !u!1001 &3594761195115370577
 PrefabInstance:
   m_ObjectHideFlags: 0

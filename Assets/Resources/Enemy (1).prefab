@@ -12,7 +12,6 @@ GameObject:
   - component: {fileID: 5703600252264259577}
   - component: {fileID: 3918562228770979020}
   - component: {fileID: 1867865293992221829}
-  - component: {fileID: 1353537478156041187}
   - component: {fileID: 8784964648923809409}
   m_Layer: 0
   m_Name: Enemy (1)
@@ -100,7 +99,7 @@ Rigidbody2D:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1618633539911696239}
-  m_BodyType: 0
+  m_BodyType: 1
   m_Simulated: 1
   m_UseFullKinematicContacts: 0
   m_UseAutoMass: 0
@@ -142,25 +141,6 @@ MonoBehaviour:
   fireInterval: 1.2
   verbose: 1
   fallbackBulletPath: EnemyBullet
---- !u!114 &1353537478156041187
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1618633539911696239}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 754ede968a2459d40a030bba220b9499, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  enemyPrefab: {fileID: 1618633539911696239}
-  reproduceInterval: 5
-  jitter: 0.8
-  offset: 0.25
-  maxAlive: 20
-  maxGenerations: 3
-  generation: 0
 --- !u!58 &8784964648923809409
 CircleCollider2D:
   m_ObjectHideFlags: 0
