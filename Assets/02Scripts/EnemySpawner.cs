@@ -1,232 +1,208 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 /// <summary>
-/// 적 스폰러: 자동 포인트 생성, 초기 다중 스폰, 생존 수 제한, 주기 스폰.
+/// 일정 시간마다 적을 여러 지점에 랜덤 스폰하는 스크립트.
+/// 스폰 포인트가 없으면 자동 생성하며,
+/// Enemy Prefab이 비어 있으면 Resources 폴더에서 자동으로 로드합니다.
 /// </summary>
-public class EnemySpawner : MonoBehaviour
+public sealed class EnemySpawner : MonoBehaviour
 {
     [Header("Prefab & Points")]
-    [FormerlySerializedAs("enemyPrefab")] public GameObject EnemyPrefab;   // Resources/EnemyFinal(파란 큐브)
-    [FormerlySerializedAs("resourcePath")] public string ResourcePath = "EnemyFinal";
-    [FormerlySerializedAs("spawnPoints")] public List<Transform> SpawnPoints = new();
+    [SerializeField] private GameObject enemyPrefab;           // EnemyWander 포함 프리팹
+    [SerializeField] private List<Transform> spawnPoints = new();
 
-    [Header("Rules")]
-    [FormerlySerializedAs("spawnInterval")] public float SpawnInterval = 1.5f;
-    [FormerlySerializedAs("maxAlive")] public int MaxAlive = 8;
-    [FormerlySerializedAs("initialSpawnCount")] public int InitialSpawnCount = 4;
+    [Header("Spawn Settings")]
+    [SerializeField] private float spawnInterval = 1.5f;       // 생성 간격(초)
+    [SerializeField] private int maxAlive = 8;                  // 동시에 존재 가능한 최대 적 수
+    [SerializeField] private int initialSpawnCount = 3;         // 시작 시 생성할 적 수
+    [SerializeField] private float jitterRadius = 0.5f;         // 스폰 포인트 주변 랜덤 오프셋 반경
 
-    [Header("Root (optional)")]
-    [FormerlySerializedAs("enemiesRoot")] public Transform EnemiesRoot;
+    [Header("Parent Group (Optional)")]
+    [SerializeField] private Transform enemiesRoot;             // 생성된 적들을 모을 부모 오브젝트
 
-    [Header("Options")]
-    [FormerlySerializedAs("spawnOnEnable")] public bool SpawnOnEnable = true;
+    [Header("Fallback Resource (Optional)")]
+    [SerializeField] private string prefabResourcePath = "EnemyFinal"; // Assets/Resources/EnemyFinal.prefab
 
-    private Coroutine _loop;
+    private Coroutine _spawnLoop;
+
+    private void Awake()
+    {
+        Debug.Log($"[Spawner/Awake] obj={name}, prefab={enemyPrefab?.name ?? "NULL"}", this);
+
+        // 🔹 스폰 포인트 자동 수집 또는 생성
+        if (spawnPoints == null || spawnPoints.Count == 0)
+        {
+            CollectSpawnPoints();
+        }
+
+        CreateDefaultPointsIfEmpty();
+
+        // 🔹 Enemy 프리팹 자동 보강
+        if (enemyPrefab == null && !string.IsNullOrWhiteSpace(prefabResourcePath))
+        {
+            enemyPrefab = Resources.Load<GameObject>(prefabResourcePath);
+            if (enemyPrefab != null)
+            {
+                Debug.Log($"[Spawner] Resources로 prefab 보강 성공: {enemyPrefab.name}", this);
+            }
+        }
+    }
 
     private void OnEnable()
     {
-        if (EnemyPrefab == null && !string.IsNullOrEmpty(ResourcePath))
-        {
-            EnemyPrefab = Resources.Load<GameObject>(ResourcePath);
-        }
-
-        if (EnemyPrefab == null)
-        {
-            Debug.LogError("[Spawner] EnemyPrefab 미지정 또는 Resources/" + ResourcePath + " 없음.", this);
-            return;
-        }
-
-        if (SpawnPoints.Count == 0)
-        {
-            foreach (Transform t in transform)
-            {
-                if (t != null)
-                {
-                    SpawnPoints.Add(t);
-                }
-            }
-        }
-
-        if (SpawnPoints.Count == 0)
-        {
-            AutoCreatePoints();
-        }
-
-        if (EnemiesRoot == null)
-        {
-            var root = GameObject.Find("Enemies_Container");
-            if (root == null)
-            {
-                root = new GameObject("Enemies_Container");
-            }
-            EnemiesRoot = root.transform;
-        }
-
-        ForceSpawn(InitialSpawnCount);
-
-        if (SpawnOnEnable)
-        {
-            if (_loop != null)
-            {
-                StopCoroutine(_loop);
-            }
-
-            _loop = StartCoroutine(SpawnLoop());
-        }
+        Debug.Log($"[Spawner/OnEnable] obj={name}, prefab={(enemyPrefab ? enemyPrefab.name : "NULL")}", this);
+        _spawnLoop ??= StartCoroutine(SpawnLoop());
     }
 
     private void OnDisable()
     {
-        if (_loop != null)
+        if (_spawnLoop != null)
         {
-            StopCoroutine(_loop);
+            StopCoroutine(_spawnLoop);
+            _spawnLoop = null;
         }
     }
 
+    /// <summary>
+    /// 스폰 루프 코루틴.
+    /// </summary>
     private IEnumerator SpawnLoop()
     {
-        var wait = new WaitForSeconds(SpawnInterval);
-        while (true)
+        yield return null;
+        SpawnInitial();
+
+        var wait = new WaitForSeconds(spawnInterval);
+        while (enabled)
         {
             TrySpawnOne();
             yield return wait;
         }
     }
 
+    /// <summary>
+    /// 시작 시 초기 스폰.
+    /// </summary>
+    private void SpawnInitial()
+    {
+        for (int i = 0; i < initialSpawnCount; i++)
+        {
+            TrySpawnOne();
+        }
+    }
+
+    /// <summary>
+    /// 단일 적 스폰 시도.
+    /// </summary>
     private void TrySpawnOne()
     {
-        int alive = CountAliveInScene();
-        if (alive >= MaxAlive)
+        if (enemyPrefab == null)
+        {
+            Debug.LogError($"[Spawner] enemyPrefab 미지정 | obj={name}", this);
+            return;
+        }
+
+        if (spawnPoints == null || spawnPoints.Count == 0)
+        {
+            Debug.LogError($"[Spawner] spawnPoints 미지정 | obj={name}", this);
+            return;
+        }
+
+        // 현재 존재하는 적 수 확인 (EnemyWander 기준)
+        int alive = FindObjectsByType<EnemyWander>(FindObjectsSortMode.None).Length;
+        if (alive >= maxAlive)
         {
             return;
         }
 
-        var p = SpawnPoints[Random.Range(0, SpawnPoints.Count)];
-        SpawnOneAt(p.position);
+        // 랜덤 스폰 포인트 + 주변 오프셋
+        Transform point = spawnPoints[Random.Range(0, spawnPoints.Count)];
+        Vector2 offset = Random.insideUnitCircle * jitterRadius;
+        Vector3 spawnPos = point.position + new Vector3(offset.x, offset.y, 0f);
+
+        // 적 생성
+        GameObject enemy = Instantiate(enemyPrefab, spawnPos, Quaternion.identity);
+
+        if (enemiesRoot != null)
+        {
+            enemy.transform.SetParent(enemiesRoot, true);
+        }
+
+        Debug.Log($"[Spawner] Spawned {enemy.name} at {spawnPos}");
     }
 
-    private void ForceSpawn(int n)
+    /// <summary>
+    /// 자식 오브젝트 중 이름에 "point"가 포함된 Transform 자동 수집.
+    /// </summary>
+    [ContextMenu("Collect Spawn Points From Children")]
+    private void CollectSpawnPoints()
     {
-        for (int i = 0; i < n; i++)
+        spawnPoints ??= new List<Transform>();
+        spawnPoints.Clear();
+
+        foreach (Transform child in GetComponentsInChildren<Transform>(true))
         {
-            var p = SpawnPoints[Random.Range(0, SpawnPoints.Count)];
-            SpawnOneAt(p.position);
-        }
-    }
-
-    private void SpawnOneAt(Vector3 pos)
-    {
-        var go = Object.Instantiate(EnemyPrefab, pos, Quaternion.identity, EnemiesRoot);
-        go.name = "EnemyFinal";
-
-        if (!go.CompareTag("Enemy"))
-        {
-            go.tag = "Enemy";
-        }
-
-        var hp = go.GetComponent<Health>();
-        if (hp == null)
-        {
-            hp = go.AddComponent<Health>();
-            hp.maxHP = 100;
-            hp.currentHP = 100;
-        }
-
-        var ew = go.GetComponent<EnemyWander>();
-        if (ew == null)
-        {
-            ew = go.AddComponent<EnemyWander>();
-        }
-
-        ew.BulletResourcePath = "Z_EnemyBullet";
-        ew.MaxBulletsOnAir = 4;
-        ew.FireInterval = 1.0f;
-        ew.BulletSpeed = 9f;
-        ew.BulletLife = 2.2f;
-        ew.ClampToCamera = true;
-        ew.WanderRadius = 6f;
-
-        // FirePoint 보정
-        Transform found = null;
-        foreach (Transform t in go.GetComponentsInChildren<Transform>(true))
-        {
-            if (t.name.Replace(" ", "").ToLower() == "firepoint")
+            if (child == transform) continue;
+            if (child.name.ToLower().Contains("point"))
             {
-                found = t;
-                break;
+                spawnPoints.Add(child);
             }
         }
 
-        if (found == null)
-        {
-            var f = new GameObject("FirePoint");
-            f.transform.SetParent(go.transform);
-            f.transform.localPosition = new Vector3(0f, 0.5f, 0f);
-            f.transform.localRotation = Quaternion.identity;
-            ew.FirePoint = f.transform;
-        }
-        else
-        {
-            ew.FirePoint = found;
-        }
+        Debug.Log($"[Spawner] 수집된 포인트: {spawnPoints.Count}개 | obj={name}", this);
     }
 
-    private int CountAliveInScene()
+    /// <summary>
+    /// 스폰 포인트가 전혀 없을 경우, 기본 포인트 3개 자동 생성.
+    /// </summary>
+    private void CreateDefaultPointsIfEmpty()
     {
-        var arr = Object.FindObjectsByType<EnemyWander>(FindObjectsSortMode.None);
-        int c = 0;
-        foreach (var e in arr)
+        if (spawnPoints != null && spawnPoints.Count > 0)
         {
-            if (e != null && e.gameObject.activeInHierarchy)
-            {
-                c++;
-            }
-        }
-        return c;
-    }
-
-    private void AutoCreatePoints()
-    {
-        var cam = Camera.main;
-        if (cam == null)
-        {
-            SpawnPoints.Add(transform);
             return;
         }
 
-        Vector3 p1 = cam.ViewportToWorldPoint(new Vector3(0.2f, 0.85f, -cam.transform.position.z));
-        Vector3 p2 = cam.ViewportToWorldPoint(new Vector3(0.8f, 0.85f, -cam.transform.position.z));
-        Vector3 p3 = cam.ViewportToWorldPoint(new Vector3(0.5f, 0.95f, -cam.transform.position.z));
+        spawnPoints = new List<Transform>();
+        Vector3 basePos = transform.position;
 
-        SpawnPoints.Clear();
-        SpawnPoints.Add(CreatePoint("EnemyPoint1", p1));
-        SpawnPoints.Add(CreatePoint("EnemyPoint2", p2));
-        SpawnPoints.Add(CreatePoint("EnemyPoint3", p3));
-    }
+        Vector3[] localPositions =
+        {
+            new(-3f, 0f, 0f),
+            new(0f, 3f, 0f),
+            new(3f, 0f, 0f)
+        };
 
-    private Transform CreatePoint(string name, Vector3 pos)
-    {
-        var go = new GameObject(name);
-        go.transform.SetParent(transform);
-        go.transform.position = pos;
-        return go.transform;
+        foreach (Vector3 pos in localPositions)
+        {
+            GameObject point = new GameObject($"SpawnPoint_{spawnPoints.Count + 1}");
+            point.transform.SetParent(transform);
+            point.transform.position = basePos + pos;
+            spawnPoints.Add(point.transform);
+        }
+
+        Debug.Log($"[Spawner] 기본 포인트 자동 생성 완료 ({spawnPoints.Count}개).", this);
     }
 
 #if UNITY_EDITOR
-    private void OnDrawGizmos()
+    /// <summary>
+    /// 에디터에서 값이 비어있으면 자동 보강 (즉시 반영).
+    /// </summary>
+    private void OnValidate()
     {
-        Gizmos.color = Color.green;
-        foreach (var p in SpawnPoints)
+        if (enemyPrefab == null && !string.IsNullOrWhiteSpace(prefabResourcePath))
         {
-            if (p != null)
+            var loaded = Resources.Load<GameObject>(prefabResourcePath);
+            if (loaded != null)
             {
-                Gizmos.DrawWireSphere(p.position, 0.25f);
+                enemyPrefab = loaded;
             }
+        }
+
+        if (spawnPoints == null || spawnPoints.Count == 0)
+        {
+            CollectSpawnPoints();
         }
     }
 #endif
 }
-
