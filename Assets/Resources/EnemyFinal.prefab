@@ -111,22 +111,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3cfc3f78a8c4f10438791d0c3bdca8a1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  firePoint: {fileID: 4439790422072558065}
-  bulletPrefab: {fileID: 8362934406945012652, guid: c8d76d00ed7682a41bee1c24aa664fb5, type: 3}
-  bulletResourcePath: EnemyBullet
-  speed: 2.2
-  wanderRadius: 6
-  newTargetTimeRange: {x: 1.2, y: 2.2}
-  arriveThreshold: 0.25
-  clampToCamera: 1
-  aimAtPlayer: 1
-  fireInterval: 1
-  bulletSpeed: 9
-  bulletLife: 2
-  bulletAccel: 0
-  maxBulletsOnAir: 4
-  fireJitter: 0.15
-  verbose: 1
+  FirePoint: {fileID: 4439790422072558065}
+  BulletPrefab: {fileID: 8362934406945012652, guid: c8d76d00ed7682a41bee1c24aa664fb5, type: 3}
+  BulletResourcePath: EnemyBullet
+  Speed: 2.2
+  WanderRadius: 6
+  NewTargetTimeRange: {x: 1.2, y: 2.2}
+  ArriveThreshold: 0.25
+  ClampToCamera: 1
+  AimAtPlayer: 1
+  FireInterval: 1
+  BulletSpeed: 9
+  BulletLife: 2
+  BulletAccel: 0
+  MaxBulletsOnAir: 4
+  FireJitter: 0.15
 --- !u!212 &8140312833638397426
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -171,7 +170,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 5
-  m_Sprite: {fileID: 10911, guid: 0000000000000000f000000000000000, type: 0}
+  m_Sprite: {fileID: -1147401495359466748, guid: 138040323294fd440a3a823e5d70ad01, type: 3}
   m_Color: {r: 0.5707547, g: 0, b: 0, a: 1}
   m_FlipX: 0
   m_FlipY: 0
