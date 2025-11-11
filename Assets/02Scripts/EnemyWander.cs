@@ -1,81 +1,88 @@
 ﻿using System.Linq;
 using UnityEngine;
+using UnityEngine.Serialization;
 
+/// <summary>
+/// 적 랜덤 배회 + 플레이어 조준 사격. 화면 이탈 방지, 탄 제한(개별/전역).
+/// </summary>
 [RequireComponent(typeof(Collider2D))]
 public class EnemyWander : MonoBehaviour
 {
     [Header("Refs")]
-    public Transform firePoint;                         // 자식 FirePoint
-    public GameObject bulletPrefab;                      // Resources/Z_EnemyBullet (파란 큐브)
-    public string bulletResourcePath = "Z_EnemyBullet";
+    [FormerlySerializedAs("firePoint")] public Transform FirePoint;
+    [FormerlySerializedAs("bulletPrefab")] public GameObject BulletPrefab;
+    [FormerlySerializedAs("bulletResourcePath")] public string BulletResourcePath = "Z_EnemyBullet";
 
     [Header("Move")]
-    public float speed = 2.5f;
-    public float wanderRadius = 6f;
-    public Vector2 newTargetTimeRange = new Vector2(1.2f, 2.2f);
-    public float arriveThreshold = 0.25f;
-    public bool clampToCamera = true;
+    [FormerlySerializedAs("speed")] public float Speed = 2.5f;
+    [FormerlySerializedAs("wanderRadius")] public float WanderRadius = 6f;
+    [FormerlySerializedAs("newTargetTimeRange")] public Vector2 NewTargetTimeRange = new(1.2f, 2.2f);
+    [FormerlySerializedAs("arriveThreshold")] public float ArriveThreshold = 0.25f;
+    [FormerlySerializedAs("clampToCamera")] public bool ClampToCamera = true;
 
     [Header("Shoot")]
-    public bool aimAtPlayer = true;
-    public float fireInterval = 1.0f;
-    public float bulletSpeed = 9f;
-    public float bulletLife = 2.2f;
-    public float bulletAccel = 0f;
-    public int maxBulletsOnAir = 4;                   // 개별 상한
-    public float fireJitter = 0f;
+    [FormerlySerializedAs("aimAtPlayer")] public bool AimAtPlayer = true;
+    [FormerlySerializedAs("fireInterval")] public float FireInterval = 1.0f;
+    [FormerlySerializedAs("bulletSpeed")] public float BulletSpeed = 9f;
+    [FormerlySerializedAs("bulletLife")] public float BulletLife = 2.2f;
+    [FormerlySerializedAs("bulletAccel")] public float BulletAccel = 0f;
+    [FormerlySerializedAs("maxBulletsOnAir")] public int MaxBulletsOnAir = 4;
+    [FormerlySerializedAs("fireJitter")] public float FireJitter = 0f;
 
-    [Header("Debug")]
-    public bool verbose = false;
+    private Transform _player;
+    private Vector3 _startPos;
+    private Vector3 _targetPos;
+    private float _changeTimer;
+    private float _fireCd;
+    private int _myBullets;
 
-    Transform player;
-    Vector3 startPos, targetPos;
-    float changeTimer, fireCd;
-    int myBullets;
+    private const float MinFireInterval = 0.3f;
 
-    const float MIN_FIRE_INTERVAL = 0.3f;
-
-    void Awake()
+    private void Awake()
     {
-        // 최소 물리 보정
-        var rb = GetComponent<Rigidbody2D>(); if (!rb) rb = gameObject.AddComponent<Rigidbody2D>();
-        rb.bodyType = RigidbodyType2D.Kinematic; rb.gravityScale = 0f;
-        var col = GetComponent<Collider2D>(); col.isTrigger = true;
+        var rb = GetComponent<Rigidbody2D>();
+        if (rb == null) rb = gameObject.AddComponent<Rigidbody2D>();
+        rb.bodyType = RigidbodyType2D.Kinematic;
+        rb.gravityScale = 0f;
 
-        firePoint = FindOrCreateFirePoint();
+        var col = GetComponent<Collider2D>();
+        col.isTrigger = true;
 
-        // 슬롯이 씬 오브젝트를 물면 무효화하고 다시 로드
-        if (bulletPrefab != null && bulletPrefab.scene.IsValid()) bulletPrefab = null;
-        if (!bulletPrefab && !string.IsNullOrEmpty(bulletResourcePath))
-            bulletPrefab = Resources.Load<GameObject>(bulletResourcePath);
+        FirePoint = FindOrCreateFirePoint();
+
+        if (BulletPrefab != null && BulletPrefab.scene.IsValid())
+            BulletPrefab = null;
+
+        if (BulletPrefab == null && !string.IsNullOrEmpty(BulletResourcePath))
+            BulletPrefab = Resources.Load<GameObject>(BulletResourcePath);
     }
 
-    void Start()
+    private void Start()
     {
-        var p = GameObject.FindGameObjectWithTag("Player"); if (p) player = p.transform;
-        startPos = transform.position; PickNewTarget();
+        var p = GameObject.FindGameObjectWithTag("Player");
+        if (p != null) _player = p.transform;
 
-        fireInterval = Mathf.Max(MIN_FIRE_INTERVAL, fireInterval);
-        maxBulletsOnAir = Mathf.Max(1, maxBulletsOnAir);
+        _startPos = transform.position;
+        PickNewTarget();
 
-        if (verbose) Debug.Log($"[EW/Start] {name} fp={firePoint?.name}, bullet={bulletPrefab?.name}", this);
+        FireInterval = Mathf.Max(MinFireInterval, FireInterval);
+        MaxBulletsOnAir = Mathf.Max(1, MaxBulletsOnAir);
     }
 
-    void Update()
+    private void Update()
     {
         MoveWander();
         ShootLoop();
     }
 
-    // ---- Move ----
-    void MoveWander()
+    private void MoveWander()
     {
-        changeTimer -= Time.deltaTime;
-        if (changeTimer <= 0f || Vector2.Distance(transform.position, targetPos) <= arriveThreshold)
+        _changeTimer -= Time.deltaTime;
+        if (_changeTimer <= 0f || Vector2.Distance(transform.position, _targetPos) <= ArriveThreshold)
             PickNewTarget();
 
-        Vector3 dir = (targetPos - transform.position).normalized;
-        transform.position += dir * speed * Time.deltaTime;
+        Vector3 dir = (_targetPos - transform.position).normalized;
+        transform.position += dir * Speed * Time.deltaTime;
 
         if (dir.sqrMagnitude > 0.0001f)
         {
@@ -83,94 +90,116 @@ public class EnemyWander : MonoBehaviour
             transform.rotation = Quaternion.Euler(0, 0, ang);
         }
 
-        if (clampToCamera && Camera.main)
-        {
-            var cam = Camera.main;
-            Vector3 min = cam.ViewportToWorldPoint(new Vector3(0.05f, 0.05f, -cam.transform.position.z));
-            Vector3 max = cam.ViewportToWorldPoint(new Vector3(0.95f, 0.95f, -cam.transform.position.z));
-            var pos = transform.position;
-            pos.x = Mathf.Clamp(pos.x, min.x, max.x);
-            pos.y = Mathf.Clamp(pos.y, min.y, max.y);
-            transform.position = pos;
-        }
+        KeepInsideCamera();
     }
 
-    void PickNewTarget()
+    /// <summary>다음 임의 목적지 설정.</summary>
+    private void PickNewTarget()
     {
-        Vector2 offset = Random.insideUnitCircle * wanderRadius;
-        targetPos = startPos + new Vector3(offset.x, offset.y, 0f);
-        changeTimer = Random.Range(newTargetTimeRange.x, newTargetTimeRange.y);
+        Vector2 offset = Random.insideUnitCircle * WanderRadius;
+        _targetPos = _startPos + new Vector3(offset.x, offset.y, 0f);
+        _changeTimer = Random.Range(NewTargetTimeRange.x, NewTargetTimeRange.y);
     }
 
-    // ---- Shoot ----
-    void ShootLoop()
+    private void ShootLoop()
     {
-        if (!firePoint || !bulletPrefab) return;
-
-        // 개별/전역 탄 상한
-        if (myBullets >= maxBulletsOnAir) return;
+        if (FirePoint == null || BulletPrefab == null) return;
+        if (_myBullets >= MaxBulletsOnAir) return;
         if (BulletSimple.GlobalEnemyBullets >= BulletSimple.GlobalEnemyBulletsMax) return;
 
-        fireCd -= Time.deltaTime;
-        if (fireCd > 0f) return;
+        _fireCd -= Time.deltaTime;
+        if (_fireCd > 0f) return;
 
-        Vector2 dir = (aimAtPlayer && player)
-            ? (player.position - firePoint.position).normalized
-            : (Vector2)firePoint.up;
+        Vector2 dir = (AimAtPlayer && _player != null)
+            ? (Vector2)((_player.position - FirePoint.position).normalized)
+            : (Vector2)FirePoint.up;
 
         ShootOne(dir);
-
-        fireCd = Mathf.Max(MIN_FIRE_INTERVAL, fireInterval + Random.Range(-fireJitter, fireJitter));
+        _fireCd = Mathf.Max(MinFireInterval, FireInterval + Random.Range(-FireJitter, FireJitter));
     }
 
-    void ShootOne(Vector2 dir)
+    private void ShootOne(Vector2 dir)
     {
-        var go = Instantiate(bulletPrefab, firePoint.position, Quaternion.identity);
-        go.transform.SetParent(transform, worldPositionStays: true);
+        var go = Instantiate(BulletPrefab, FirePoint.position, Quaternion.identity);
+        go.transform.SetParent(transform, true);
 
         float ang = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg - 90f;
         go.transform.rotation = Quaternion.Euler(0, 0, ang);
 
         var b = go.GetComponent<BulletSimple>();
-        if (!b)
+        if (b == null)
         {
-            // 방탄: 누락시 자동 추가 + 최소 물리 보정
-            if (verbose) Debug.LogWarning("[EW] BulletSimple 누락 → 런타임 자동 추가", go);
             b = go.AddComponent<BulletSimple>();
-            var rb = go.GetComponent<Rigidbody2D>(); if (!rb) { rb = go.AddComponent<Rigidbody2D>(); rb.bodyType = RigidbodyType2D.Kinematic; rb.gravityScale = 0f; }
-            var col = go.GetComponent<Collider2D>(); if (!col) { var c = go.AddComponent<CircleCollider2D>(); c.radius = 0.08f; c.isTrigger = true; } else { col.isTrigger = true; }
+            var rb = go.GetComponent<Rigidbody2D>() ?? go.AddComponent<Rigidbody2D>();
+            rb.bodyType = RigidbodyType2D.Kinematic;
+            rb.gravityScale = 0f;
+
+            var col = go.GetComponent<Collider2D>() ?? go.AddComponent<CircleCollider2D>();
+            col.isTrigger = true;
+            if (col is CircleCollider2D cc) cc.radius = 0.08f;
         }
 
-        // 적탄은 주인 검사 + 전역 카운트
-        b.requireEnemyOwner = true;
-        b.Init(dir, bulletSpeed, bulletLife, bulletAccel, 15, "Enemy");
+        b.RequireEnemyOwner = true;
+        b.Init(dir, BulletSpeed, BulletLife, BulletAccel, 15, "Enemy");
 
-        // 개별 카운트 감소 훅
         var hook = go.AddComponent<ReturnHook>();
-        hook.onDespawn = () => { myBullets = Mathf.Max(0, myBullets - 1); };
-
-        myBullets++;
-        if (verbose) Debug.Log($"[EW/Fire] {name} mine={myBullets}, global={BulletSimple.GlobalEnemyBullets}", this);
+        hook.OnDespawn = () => { _myBullets = Mathf.Max(0, _myBullets - 1); };
+        _myBullets++;
     }
 
-    class ReturnHook : MonoBehaviour
+    private class ReturnHook : MonoBehaviour
     {
-        public System.Action onDespawn;
-        void OnDisable() => onDespawn?.Invoke();
-        void OnDestroy() => onDespawn?.Invoke();
+        public System.Action OnDespawn;
+        private void OnDisable() => OnDespawn?.Invoke();
+        private void OnDestroy() => OnDespawn?.Invoke();
     }
 
-    // ---- Util ----
-    Transform FindOrCreateFirePoint()
+    private void KeepInsideCamera()
     {
-        if (firePoint) return firePoint;
+        if (!ClampToCamera) return;
+        if (!TryGetCameraBounds(out var min, out var max)) return;
+
+        var pos = transform.position;
+        bool outX = pos.x < min.x || pos.x > max.x;
+        bool outY = pos.y < min.y || pos.y > max.y;
+        if (!(outX || outY)) return;
+
+        var cam = Camera.main;
+        var center = cam.ViewportToWorldPoint(new Vector3(0.5f, 0.5f, -cam.transform.position.z));
+        _targetPos = new Vector3(
+            Mathf.Clamp(center.x + Random.Range(-WanderRadius, WanderRadius), min.x, max.x),
+            Mathf.Clamp(center.y + Random.Range(-WanderRadius, WanderRadius), min.y, max.y),
+            0f
+        );
+        _changeTimer = Random.Range(NewTargetTimeRange.x, NewTargetTimeRange.y);
+
+        pos.x = Mathf.Clamp(pos.x, min.x, max.x);
+        pos.y = Mathf.Clamp(pos.y, min.y, max.y);
+        transform.position = pos;
+    }
+
+    private bool TryGetCameraBounds(out Vector3 min, out Vector3 max)
+    {
+        min = max = Vector3.zero;
+        var cam = Camera.main;
+        if (cam == null) return false;
+
+        min = cam.ViewportToWorldPoint(new Vector3(0.05f, 0.05f, -cam.transform.position.z));
+        max = cam.ViewportToWorldPoint(new Vector3(0.95f, 0.95f, -cam.transform.position.z));
+        return true;
+    }
+
+    private Transform FindOrCreateFirePoint()
+    {
+        if (FirePoint != null) return FirePoint;
 
         var fp = GetComponentsInChildren<Transform>(true)
             .FirstOrDefault(t => t.name.Replace(" ", "").Equals("FirePoint", System.StringComparison.OrdinalIgnoreCase));
-        if (fp) return fp;
+        if (fp != null) return fp;
 
         var go = new GameObject("FirePoint");
-        fp = go.transform; fp.SetParent(transform);
+        fp = go.transform;
+        fp.SetParent(transform);
         fp.localPosition = new Vector3(0f, 0.5f, 0f);
         fp.localRotation = Quaternion.identity;
         return fp;

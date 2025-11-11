@@ -1,98 +1,118 @@
 ﻿using UnityEngine;
+using UnityEngine.Serialization;
 
+/// <summary>
+/// 공용 탄환: 이동/수명/충돌/데미지 + (적탄) 전역 개수 제한/고스트 가드.
+/// </summary>
 public class BulletSimple : MonoBehaviour
 {
     [Header("Movement")]
-    public float speed = 6f;
-    public float life = 2f;
-    public float accel = 0f;
+    [FormerlySerializedAs("speed")] public float Speed = 6f;
+    [FormerlySerializedAs("life")] public float Life = 2f;
+    [FormerlySerializedAs("accel")] public float Accel = 0f;
 
     [Header("Damage")]
-    public int damage = 15;          // 한 발 데미지
-    public string ownerTag = "Player";    // "Player" or "Enemy"
+    [FormerlySerializedAs("damage")] public int Damage = 15;
+    /// <summary> "Player" 또는 "Enemy" </summary>
+    [FormerlySerializedAs("ownerTag")] public string OwnerTag = "Player";
 
     [Header("Safety")]
-    public bool requireEnemyOwner = true; // 적탄은 주인(EnemyWander) 없으면 바로 삭제
-    public bool verbose = false;
+    /// <summary> 적탄은 반드시 EnemyWander 하위에서만 살도록 강제. </summary>
+    public bool RequireEnemyOwner = true;
 
-    // 전역 탄 카운트(적탄 한정)
+    /// <summary> 전역 적탄 개수(적탄만 카운트). </summary>
     public static int GlobalEnemyBullets = 0;
+
+    /// <summary> 전역 적탄 최대 허용치. </summary>
     public static int GlobalEnemyBulletsMax = 24;
 
-    Vector2 dir = Vector2.up;
-    float t;
-    bool counted = false;
+    private Vector2 _dir = Vector2.up;
+    private float _t;
+    private bool _counted;
 
-    public void Init(Vector2 direction, float spd, float lf, float ac = 0f, int dmg = 15, string owner = "Player")
+    /// <summary>발사 시 초기화.</summary>
+    public void Init(Vector2 direction, float speed, float life, float accel = 0f, int damage = 15, string owner = "Player")
     {
-        dir = direction.normalized;
-        speed = spd;
-        life = lf;
-        accel = ac;
-        damage = dmg;
-        ownerTag = owner;
-        t = 0f;
+        _dir = direction.normalized;
+        Speed = speed;
+        Life = life;
+        Accel = accel;
+        Damage = damage;
+        OwnerTag = owner;
+        _t = 0f;
 
-        // 적탄 전역 상한 체크
-        if (ownerTag == "Enemy")
+        if (OwnerTag == "Enemy")
         {
             if (GlobalEnemyBullets >= GlobalEnemyBulletsMax)
             {
-                if (verbose) Debug.LogWarning("[BulletSimple] 글로벌 적탄 한도 초과 → 스폰 취소", this);
                 Destroy(gameObject);
                 return;
             }
+
             GlobalEnemyBullets++;
-            counted = true;
+            _counted = true;
         }
     }
 
-    void Awake()
+    private void Awake()
     {
-        // 적탄이면 주인 강제 확인
-        if (ownerTag == "Enemy" && requireEnemyOwner)
+        if (OwnerTag == "Enemy" && RequireEnemyOwner)
         {
             var p = transform.parent;
-            var ok = p && p.GetComponentInParent<EnemyWander>() != null;
+            bool ok = p && p.GetComponentInParent<EnemyWander>() != null;
             if (!ok)
             {
-                if (verbose) Debug.LogWarning("[BulletSimple] 적탄인데 주인(EnemyWander)이 없음 → 자멸", this);
                 Destroy(gameObject);
             }
         }
     }
 
-    void Update()
+    private void Update()
     {
-        t += Time.deltaTime;
-        if (t >= life) { Destroy(gameObject); return; }
+        _t += Time.deltaTime;
+        if (_t >= Life)
+        {
+            Destroy(gameObject);
+            return;
+        }
 
-        speed += accel * Time.deltaTime;
-        transform.position += (Vector3)(dir * speed * Time.deltaTime);
+        Speed += Accel * Time.deltaTime;
+        transform.position += (Vector3)(_dir * Speed * Time.deltaTime);
     }
 
-    void OnBecameInvisible() { Destroy(gameObject); }
-
-    void OnTriggerEnter2D(Collider2D other)
+    private void OnBecameInvisible()
     {
-        if (!other || !other.gameObject.activeInHierarchy) return;
+        Destroy(gameObject);
+    }
 
-        // 아군 무시
-        if (other.CompareTag(ownerTag)) return;
+    private void OnTriggerEnter2D(Collider2D other)
+    {
+        if (!other || !other.gameObject.activeInHierarchy)
+        {
+            return;
+        }
 
-        // 상대 태그에만 데미지
-        string targetTag = ownerTag == "Player" ? "Enemy" : "Player";
+        if (other.CompareTag(OwnerTag))
+        {
+            return; // 아군 무시
+        }
+
+        string targetTag = OwnerTag == "Player" ? "Enemy" : "Player";
         if (other.CompareTag(targetTag))
         {
             var hp = other.GetComponentInParent<Health>();
-            if (hp) hp.TakeDamage(damage);
+            if (hp != null)
+            {
+                hp.TakeDamage(Damage);
+            }
+
             Destroy(gameObject);
         }
     }
 
-    void OnDestroy()
+    private void OnDestroy()
     {
-        if (counted && ownerTag == "Enemy")
+        if (_counted && OwnerTag == "Enemy")
         {
             GlobalEnemyBullets = Mathf.Max(0, GlobalEnemyBullets - 1);
         }

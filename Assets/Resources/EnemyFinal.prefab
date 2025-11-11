@@ -119,7 +119,7 @@ MonoBehaviour:
   newTargetTimeRange: {x: 1.2, y: 2.2}
   arriveThreshold: 0.25
   clampToCamera: 1
-  aimAtPlayer: 0
+  aimAtPlayer: 1
   fireInterval: 1
   bulletSpeed: 9
   bulletLife: 2

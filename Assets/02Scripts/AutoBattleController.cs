@@ -1,20 +1,29 @@
-﻿// AutoBattleController.cs
-using UnityEngine;
+﻿using UnityEngine;
 
+/// <summary>
+/// 키 입력으로 플레이어 자동사격 토글(1=ON, 2=OFF).
+/// </summary>
 public class AutoBattleController : MonoBehaviour
 {
-    public PlayerShooting playerShooting;
-    public KeyCode toggleKey = KeyCode.T;
+    [SerializeField] private PlayerShooting _player;
 
-    void Update()
+    private void Reset()
     {
-        if (Input.GetKeyDown(toggleKey))
+        if (_player == null)
         {
-            if (playerShooting != null)
-            {
-                playerShooting.autoBattleEnabled = !playerShooting.autoBattleEnabled;
-                Debug.Log($"[AutoBattle] {(playerShooting.autoBattleEnabled ? "ON" : "OFF")}");
-            }
+            var p = GameObject.FindGameObjectWithTag("Player");
+            if (p != null) _player = p.GetComponent<PlayerShooting>();
         }
+    }
+
+    private void Update()
+    {
+        if (_player == null) return;
+
+        if (Input.GetKeyDown(KeyCode.Alpha1))
+            _player.AutoBattleEnabled = true;
+
+        if (Input.GetKeyDown(KeyCode.Alpha2))
+            _player.AutoBattleEnabled = false;
     }
 }

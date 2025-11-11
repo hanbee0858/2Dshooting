@@ -1,42 +1,21 @@
 ﻿using UnityEngine;
 
+/// <summary>
+/// 경계/벽 트리거에서 탄환 정리. (태그: "Boundary","Limit","Wall")
+/// </summary>
 public class BulletSweeper : MonoBehaviour
 {
-    [Header("청소 주기(초)")]
-    public float interval = 1.0f;
-
-    [Header("디버그 로그")]
-    public bool verbose = false;
-
-    float cd;
-
-    void Update()
+    private void OnTriggerEnter2D(Collider2D other)
     {
-        cd -= Time.deltaTime;
-        if (cd > 0f) return;
-        cd = interval;
+        if (!other) return;
 
-        var bullets = FindObjectsByType<BulletSimple>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
-        int cleaned = 0;
-
-        foreach (var b in bullets)
+        if (other.CompareTag("Boundary") || other.CompareTag("Limit") || other.CompareTag("Wall"))
         {
-            if (!b || !b.gameObject.activeInHierarchy) continue;
-
-            // 적탄인데 주인(EnemyWander)이 없거나, parent가 전혀 없으면 → 삭제
-            if (b.ownerTag == "Enemy")
+            var bullet = other.GetComponent<BulletSimple>();
+            if (bullet != null)
             {
-                var p = b.transform.parent;
-                bool ok = p && p.GetComponentInParent<EnemyWander>() != null;
-                if (!ok)
-                {
-                    Destroy(b.gameObject);
-                    cleaned++;
-                }
+                Destroy(other.gameObject);
             }
         }
-
-        if (verbose && cleaned > 0)
-            Debug.Log($"[BulletSweeper] cleaned {cleaned} ghost enemy bullets", this);
     }
 }

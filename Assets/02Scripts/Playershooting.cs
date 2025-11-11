@@ -1,96 +1,131 @@
 ﻿using UnityEngine;
+using UnityEngine.Serialization;
 
+/// <summary>
+/// 플레이어 사격(수동/자동). FirePoint 자동 복구, 프리팹 자동 로드, 누락시 런타임 보정 포함.
+/// </summary>
 public class PlayerShooting : MonoBehaviour
 {
     [Header("Refs")]
-    public Transform firePoint;                       // Player 자식 FirePoint
-    public GameObject bulletPrefab;                    // Resources/PlayerBullet 또는 PlayerBulletSimple
-    public string bulletResourcePath = "PlayerBullet"; // 프리팹 이름에 맞춰주세요 ("PlayerBullet" or "PlayerBulletSimple")
+    [FormerlySerializedAs("firePoint")] public Transform FirePoint;     // Player 자식. 없으면 생성.
+    [FormerlySerializedAs("bulletPrefab")] public GameObject BulletPrefab; // Resources/PlayerBullet
+    [FormerlySerializedAs("bulletResourcePath")] public string BulletResourcePath = "PlayerBullet";
 
     [Header("Control")]
-    public KeyCode fireKey = KeyCode.Space;
-    public KeyCode autoOnKey = KeyCode.Alpha1;
-    public KeyCode autoOffKey = KeyCode.Alpha2;
+    [FormerlySerializedAs("fireKey")] public KeyCode FireKey = KeyCode.Space;
+    [FormerlySerializedAs("autoOnKey")] public KeyCode AutoOnKey = KeyCode.Alpha1;
+    [FormerlySerializedAs("autoOffKey")] public KeyCode AutoOffKey = KeyCode.Alpha2;
 
     [Header("Bullet")]
-    public float bulletSpeed = 6f;
-    public float bulletLife = 2f;
-    public float bulletAccel = 0f;
-    public float fireInterval = 0.15f;
-    public bool autoBattleEnabled = false;
+    [FormerlySerializedAs("bulletSpeed")] public float BulletSpeed = 6f;
+    [FormerlySerializedAs("bulletLife")] public float BulletLife = 2f;
+    [FormerlySerializedAs("bulletAccel")] public float BulletAccel = 0f;
+    [FormerlySerializedAs("fireInterval")] public float FireInterval = 0.15f;
 
-    float cd;
+    [Header("State")]
+    [FormerlySerializedAs("autoBattleEnabled")] public bool AutoBattleEnabled = false;
 
-    void Awake()
+    private float _cd;
+
+    private void Awake()
     {
-        // FirePoint 자동 복구(없으면 생성)
-        if (!firePoint)
+        // FirePoint 자동 복구
+        if (FirePoint == null)
         {
             foreach (var t in GetComponentsInChildren<Transform>(true))
-                if (t.name.Replace(" ", "").Equals("FirePoint", System.StringComparison.OrdinalIgnoreCase)) { firePoint = t; break; }
-            if (!firePoint)
+            {
+                if (t.name.Replace(" ", "").Equals("FirePoint", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    FirePoint = t;
+                    break;
+                }
+            }
+
+            if (FirePoint == null)
             {
                 var go = new GameObject("FirePoint");
-                firePoint = go.transform; firePoint.SetParent(transform);
-                firePoint.localPosition = new Vector3(0f, 0.5f, 0f);
-                firePoint.localRotation = Quaternion.identity;
+                FirePoint = go.transform;
+                FirePoint.SetParent(transform);
+                FirePoint.localPosition = new Vector3(0f, 0.5f, 0f);
+                FirePoint.localRotation = Quaternion.identity;
             }
         }
 
-        // 프리팹 없으면 Resources에서 로드
-        if (!bulletPrefab && !string.IsNullOrEmpty(bulletResourcePath))
+        // 프리팹 자동 로드
+        if (BulletPrefab == null && !string.IsNullOrEmpty(BulletResourcePath))
         {
-            var res = Resources.Load<GameObject>(bulletResourcePath);
-            if (res) bulletPrefab = res;
+            var res = Resources.Load<GameObject>(BulletResourcePath);
+            if (res != null)
+            {
+                BulletPrefab = res;
+            }
         }
     }
 
-    void Update()
+    private void Update()
     {
-        if (Input.GetKeyDown(autoOnKey)) autoBattleEnabled = true;
-        if (Input.GetKeyDown(autoOffKey)) autoBattleEnabled = false;
-
-        cd -= Time.deltaTime;
-        if ((Input.GetKey(fireKey) || autoBattleEnabled) && cd <= 0f)
+        if (Input.GetKeyDown(AutoOnKey))
         {
-            if (!firePoint || !bulletPrefab)
+            AutoBattleEnabled = true;
+        }
+
+        if (Input.GetKeyDown(AutoOffKey))
+        {
+            AutoBattleEnabled = false;
+        }
+
+        _cd -= Time.deltaTime;
+
+        if ((Input.GetKey(FireKey) || AutoBattleEnabled) && _cd <= 0f)
+        {
+            if (FirePoint == null || BulletPrefab == null)
             {
-                Debug.LogWarning("[PS] Fire 실패: firePoint 또는 bulletPrefab이 null", this);
                 return;
             }
+
             Fire();
-            cd = fireInterval;
+            _cd = FireInterval;
         }
     }
 
-    void Fire()
+    /// <summary>한 발 발사(누락 시 런타임 보정 포함).</summary>
+    public void Fire()
     {
-        Vector2 dir = firePoint.up;
+        Vector2 dir = FirePoint.up;
 
-        var go = Instantiate(bulletPrefab, firePoint.position, Quaternion.identity);
+        var go = Instantiate(BulletPrefab, FirePoint.position, Quaternion.identity);
         float ang = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg - 90f;
         go.transform.rotation = Quaternion.Euler(0, 0, ang);
 
-        // 🔧 방탄: BulletSimple 없으면 자동으로 붙이고 필수 컴포넌트 보정
+        // 방탄: BulletSimple 없으면 자동 추가 + 기본 물리 세팅
         var b = go.GetComponent<BulletSimple>();
-        if (!b)
+        if (b == null)
         {
-            Debug.LogWarning("[PS] BulletSimple 누락 → 런타임 자동 추가", go);
             b = go.AddComponent<BulletSimple>();
 
             var rb = go.GetComponent<Rigidbody2D>();
-            if (!rb) { rb = go.AddComponent<Rigidbody2D>(); rb.bodyType = RigidbodyType2D.Kinematic; rb.gravityScale = 0f; }
+            if (rb == null)
+            {
+                rb = go.AddComponent<Rigidbody2D>();
+                rb.bodyType = RigidbodyType2D.Kinematic;
+                rb.gravityScale = 0f;
+            }
 
             var col = go.GetComponent<Collider2D>();
-            if (!col)
+            if (col == null)
             {
                 var c = go.AddComponent<CircleCollider2D>();
-                c.radius = 0.08f; c.isTrigger = true;
+                c.radius = 0.08f;
+                c.isTrigger = true;
             }
-            else col.isTrigger = true;
+            else
+            {
+                col.isTrigger = true;
+            }
         }
 
-        // 플레이어 탄 파라미터
-        b.Init(dir, bulletSpeed, bulletLife, bulletAccel, 15, "Player");
+        // 플레이어 탄 초기화
+        b.RequireEnemyOwner = false;
+        b.Init(dir, BulletSpeed, BulletLife, BulletAccel, 15, "Player");
     }
 }
