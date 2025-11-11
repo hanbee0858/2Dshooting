@@ -2,66 +2,61 @@
 
 public class BulletBase : MonoBehaviour
 {
-    [Header("Move")]
-    public float speed = 10f;
-    public float acceleration = 0f;
+    [Header("Runtime")]
     public Vector2 direction = Vector2.up;
+    public float speed = 6f;        // 초당
+    public float life = 2f;         // 초
+    public float accel = 0f;        // 초당 가속(+면 가속, 0 권장)
+    public float maxSpeed = 15f;
+    public Transform owner;         // 발사자 (Enemy/Player 태그 판별용)
 
-    [Header("Lifetime")]
-    public float lifeTime = 2f;
-    float timer;
+    [Header("Collision")]
+    public LayerMask ignoreLayers;  // 경계/벽 레이어 체크해두면 충돌 무시
 
-    [Header("Owner")]
-    public Transform owner;
+    float t;
+    GameObject _prefabRef;          // 풀 반납용 원본 참조
 
-    Rigidbody2D rb;
-
-    // Init 오버로드(호출부 타입/개수 달라도 OK)
-    public void Init(Vector2 dir) { direction = SafeDir(dir); }
-    public void Init(Vector2 dir, float spd) { direction = SafeDir(dir); speed = spd; }
-    public void Init(Vector2 dir, float spd, float life) { direction = SafeDir(dir); speed = spd; lifeTime = life; }
-    public void Init(Vector2 dir, float spd, float life, Transform owner)
-    { direction = SafeDir(dir); speed = spd; lifeTime = life; this.owner = owner; }
-    public void Init(Vector2 dir, float spd, float life, Transform owner, float accel)
-    { direction = SafeDir(dir); speed = spd; lifeTime = life; this.owner = owner; acceleration = accel; }
-
-    void Awake() { rb = GetComponent<Rigidbody2D>(); }
-    void OnEnable()
+    // NEW: prefabRef 추가됨
+    public void Init(Vector2 dir, float spd, float lf, Transform own, float ac, GameObject prefabRef)
     {
-        timer = lifeTime;
-        direction = SafeDir(direction);
-        ApplyVelocity();
+        direction = dir.sqrMagnitude > 0.0001f ? dir.normalized : Vector2.up;
+        speed = spd; life = lf; owner = own; accel = ac; t = 0f; _prefabRef = prefabRef;
     }
 
     void Update()
     {
-        // 수명 — 타임스케일 영향 받도록(deltaTime) 변경 (일시정지땐 멈추게)
-        timer -= Time.deltaTime;
-        if (timer <= 0f) { Destroy(gameObject); return; }
+        float dt = Time.deltaTime;
+        t += dt;
+        if (t >= life) { Despawn(); return; }
 
-        // 가속
-        if (acceleration != 0f)
+        if (accel != 0f)
         {
-            speed += acceleration * Time.deltaTime;
-            if (speed < 0f) speed = 0f;
+            speed += accel * dt;
+            speed = Mathf.Clamp(speed, 0f, maxSpeed);
         }
 
-        ApplyVelocity();
-    }
-
-    void ApplyVelocity()
-    {
-        if (rb != null) rb.linearVelocity = direction * speed;
-        else transform.position += (Vector3)(direction * speed * Time.deltaTime);
+        transform.position += (Vector3)(direction * speed * dt);
     }
 
     void OnTriggerEnter2D(Collider2D other)
     {
-        if (owner != null && other.transform == owner) return;
-        Destroy(gameObject);
+        // 1) 레이어 마스크로 무시
+        if ((ignoreLayers.value & (1 << other.gameObject.layer)) != 0) return;
+
+        if (!owner) { Despawn(); return; }
+
+        bool fromEnemy = owner.CompareTag("Enemy");
+
+        // 2) 아군/적군만 타격
+        if (fromEnemy && other.CompareTag("Player")) { /* TODO: 데미지 */ Despawn(); return; }
+        if (!fromEnemy && other.CompareTag("Enemy")) { /* TODO: 데미지 */ Despawn(); return; }
+
+        // 나머지는 관통
     }
 
-    void OnBecameInvisible() { Destroy(gameObject); }
-
-    Vector2 SafeDir(Vector2 dir) => (dir.sqrMagnitude > 0.0001f) ? dir.normalized : Vector2.up;
+    void Despawn()
+    {
+        if (_prefabRef != null && BulletPool.I) BulletPool.I.Return(_prefabRef, gameObject);
+        else Destroy(gameObject);
+    }
 }

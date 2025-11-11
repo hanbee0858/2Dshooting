@@ -1,93 +1,157 @@
-﻿using UnityEngine;
-using System.Collections;
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
 
 public class EnemySpawner : MonoBehaviour
 {
     [Header("Prefab & Points")]
-    public GameObject enemyPrefab;
-    public Transform[] spawnPoints;      // 비어 있으면 자동 수집/생성
+    public GameObject enemyPrefab;                 // Project/Resources/EnemyFinal (파란 큐브)
+    public string resourcePath = "EnemyFinal";     // Resources/EnemyFinal
+    public List<Transform> spawnPoints = new();
 
     [Header("Rules")]
-    public float spawnInterval = 2f;
-    public int maxAlive = 10;
+    public float spawnInterval = 1.5f;
+    public int maxAlive = 8;
+    public int initialSpawnCount = 4;            // 시작부터 여러 기
 
     [Header("Root (optional)")]
-    public Transform enemiesRoot;        // 비워두면 Enemies_Container 자동 생성
+    public Transform enemiesRoot;
 
     [Header("Options")]
     public bool spawnOnEnable = true;
-    public int initialSpawnCount = 0;
+    public bool verbose = true;
 
-    Transform EnsureRoot()
-    {
-        if (enemiesRoot == null)
-        {
-            var existed = GameObject.Find("Enemies_Container");
-            enemiesRoot = existed ? existed.transform : new GameObject("Enemies_Container").transform;
-        }
-        return enemiesRoot;
-    }
-
-    void Awake()
-    {
-        // 스폰 포인트 자동 수집
-        if (spawnPoints == null || spawnPoints.Length == 0)
-        {
-            var list = new System.Collections.Generic.List<Transform>();
-            foreach (Transform c in transform) list.Add(c);
-
-            if (list.Count == 0)
-            {
-                // 아무 자식도 없으면 자신의 위치에 AutoSpawnPoint 생성
-                var p = new GameObject("AutoSpawnPoint").transform;
-                p.SetParent(transform);
-                p.localPosition = Vector3.zero;
-                list.Add(p);
-            }
-            spawnPoints = list.ToArray();
-        }
-        EnsureRoot();
-    }
+    Coroutine loop;
 
     void OnEnable()
     {
-        if (!spawnOnEnable) return;
-        if (enemyPrefab == null) { Debug.LogError("[Spawner] enemyPrefab 미지정", this); return; }
+        // 프리팹 확보
+        if (!enemyPrefab && !string.IsNullOrEmpty(resourcePath))
+            enemyPrefab = Resources.Load<GameObject>(resourcePath);
 
-        StopAllCoroutines();
-        StartCoroutine(SpawnLoop());
+        if (!enemyPrefab) { Debug.LogError("[Spawner] enemyPrefab 미지정(또는 Resources/" + resourcePath + " 없음)", this); return; }
 
-        for (int i = 0; i < initialSpawnCount; i++) SpawnOne();
+        // 스폰포인트 확보
+        if (spawnPoints.Count == 0)
+            foreach (Transform t in transform) if (t) spawnPoints.Add(t);
+        if (spawnPoints.Count == 0) AutoCreatePoints();
+
+        // 루트 확보
+        if (!enemiesRoot)
+        {
+            var root = GameObject.Find("Enemies_Container");
+            if (!root) root = new GameObject("Enemies_Container");
+            enemiesRoot = root.transform;
+        }
+
+        // 시작 강제 스폰
+        ForceSpawn(initialSpawnCount);
+
+        // 루프 시작
+        if (spawnOnEnable)
+        {
+            if (loop != null) StopCoroutine(loop);
+            loop = StartCoroutine(SpawnLoop());
+        }
+
+        if (verbose) Debug.Log($"[Spawner] Ready points={spawnPoints.Count}, maxAlive={maxAlive}, interval={spawnInterval}", this);
     }
+
+    void OnDisable() { if (loop != null) StopCoroutine(loop); }
 
     IEnumerator SpawnLoop()
     {
         var wait = new WaitForSeconds(spawnInterval);
-        while (enabled && gameObject.activeInHierarchy)
-        {
-            if (Time.timeScale <= 0f) { yield return null; continue; }
-            if (AliveCount() < maxAlive) SpawnOne();
-            yield return wait;
-        }
+        while (true) { TrySpawnOne(); yield return wait; }
     }
 
-    int AliveCount() => EnsureRoot().childCount;
-
-    void SpawnOne()
+    void TrySpawnOne()
     {
-        if (enemyPrefab == null || spawnPoints == null || spawnPoints.Length == 0) return;
+        int alive = CountAliveInScene();
+        if (alive >= maxAlive) { if (verbose) Debug.Log($"[Spawner] alive={alive}/{maxAlive} 대기", this); return; }
 
-        int idx = Random.Range(0, spawnPoints.Length);
-        Transform p = spawnPoints[idx];
-        Instantiate(enemyPrefab, p.position, p.rotation, EnsureRoot());
+        var p = spawnPoints[Random.Range(0, spawnPoints.Count)];
+        SpawnOneAt(p.position);
+    }
+
+    void ForceSpawn(int n)
+    {
+        for (int i = 0; i < n; i++)
+        {
+            var p = spawnPoints[Random.Range(0, spawnPoints.Count)];
+            SpawnOneAt(p.position);
+        }
+        if (verbose) Debug.Log($"[Spawner] ForceSpawn {n} done", this);
+    }
+
+    void SpawnOneAt(Vector3 pos)
+    {
+        var go = Instantiate(enemyPrefab, pos, Quaternion.identity, enemiesRoot);
+        go.name = "EnemyFinal";
+
+        // 안전 보정: 태그/컴포넌트/FirePoint/총알 프리팹
+        if (!go.CompareTag("Enemy")) go.tag = "Enemy";
+
+        var hp = go.GetComponent<Health>(); if (!hp) { hp = go.AddComponent<Health>(); hp.maxHP = 100; hp.currentHP = 100; }
+
+        var ew = go.GetComponent<EnemyWander>(); if (!ew) ew = go.AddComponent<EnemyWander>();
+        ew.bulletResourcePath = "Z_EnemyBullet";     // 이름 고정
+        ew.maxBulletsOnAir = 4;
+        ew.fireInterval = 1.0f;
+        ew.bulletSpeed = 9f;
+        ew.bulletLife = 2.2f;
+
+        // FirePoint 자동 보정
+        var fp = go.GetComponentInChildren<Transform>(true);
+        Transform found = null;
+        foreach (Transform t in go.GetComponentsInChildren<Transform>(true))
+            if (t.name.Replace(" ", "").ToLower() == "firepoint") { found = t; break; }
+        if (!found)
+        {
+            var f = new GameObject("FirePoint");
+            f.transform.SetParent(go.transform);
+            f.transform.localPosition = new Vector3(0f, 0.5f, 0f);
+            f.transform.localRotation = Quaternion.identity;
+            ew.firePoint = f.transform;
+        }
+        else ew.firePoint = found;
+
+        if (verbose) Debug.Log($"[Spawner] Spawn @ {pos} (alive→{CountAliveInScene() + 1}/{maxAlive})", this);
+    }
+
+    int CountAliveInScene()
+    {
+        var arr = Object.FindObjectsByType<EnemyWander>(FindObjectsSortMode.None);
+        int c = 0; foreach (var e in arr) if (e && e.gameObject.activeInHierarchy) c++;
+        return c;
+    }
+
+    void AutoCreatePoints()
+    {
+        var cam = Camera.main; if (!cam) { spawnPoints.Add(transform); return; }
+        Vector3 p1 = cam.ViewportToWorldPoint(new Vector3(0.2f, 0.85f, -cam.transform.position.z));
+        Vector3 p2 = cam.ViewportToWorldPoint(new Vector3(0.8f, 0.85f, -cam.transform.position.z));
+        Vector3 p3 = cam.ViewportToWorldPoint(new Vector3(0.5f, 0.95f, -cam.transform.position.z));
+        spawnPoints.Clear();
+        spawnPoints.Add(CreatePoint("EnemyPoint1", p1));
+        spawnPoints.Add(CreatePoint("EnemyPoint2", p2));
+        spawnPoints.Add(CreatePoint("EnemyPoint3", p3));
+        if (verbose) Debug.Log("[Spawner] AutoCreatePoints 3개 생성", this);
+    }
+
+    Transform CreatePoint(string name, Vector3 pos)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(transform);
+        go.transform.position = pos;
+        return go.transform;
     }
 
 #if UNITY_EDITOR
     void OnDrawGizmos()
     {
-        if (spawnPoints == null) return;
-        Gizmos.color = Color.red;
-        foreach (var t in spawnPoints) if (t) Gizmos.DrawWireSphere(t.position, 0.25f);
+        Gizmos.color = Color.green;
+        foreach (var p in spawnPoints) if (p) Gizmos.DrawWireSphere(p.position, 0.25f);
     }
 #endif
 }
